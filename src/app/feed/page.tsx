@@ -3,28 +3,37 @@
 import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-
-const sampleVideos = [
-  { id: '1', title: 'Intro to React', category: 'Books' },
-  { id: '2', title: 'Morning Workout Routine', category: 'Fitness' },
-  { id: '3', title: 'Space Facts', category: 'Science' },
-  { id: '4', title: 'Deep Dive into JavaScript', category: 'Books' },
-];
+import { VideoCard } from '../components/VideoCard';
 
 const categories = ['All', 'Books', 'Fitness', 'Science'];
 
 export default function FeedPage() {
   const { user } = useUser();
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [videos, setVideos] = useState<any[]>([]);
   const [likedVideos, setLikedVideos] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // On mount, fetch liked videos for user
+  // Fetch videos for the selected category
+  useEffect(() => {
+    setLoading(true);
+    const categoryQuery =
+      selectedCategory === 'All' ? 'Science' : selectedCategory;
+
+    fetch(`/api/videos?category=${categoryQuery}`)
+      .then((res) => res.json())
+      .then((data) => setVideos(data))
+      .catch(() => alert('Failed to load videos'))
+      .finally(() => setLoading(false));
+  }, [selectedCategory]);
+
+  // Fetch liked videos for user
   useEffect(() => {
     if (!user) return;
-
     fetch(`/api/likedVideos?userId=${user.id}`)
       .then((res) => res.json())
-      .then((data) => setLikedVideos(data.likedVideos));
+      .then((data) => setLikedVideos(data.likedVideos))
+      .catch(() => alert('Failed to load liked videos'));
   }, [user]);
 
   async function toggleLike(id: string) {
@@ -36,23 +45,25 @@ export default function FeedPage() {
     const isLiked = likedVideos.includes(id);
     const action = isLiked ? 'unlike' : 'like';
 
-    // Optimistically update UI
     setLikedVideos((prev) =>
       isLiked ? prev.filter((vid) => vid !== id) : [...prev, id]
     );
 
-    // Persist change on backend
-    await fetch('/api/likedVideos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, videoId: id, action }),
-    });
-  }
+    try {
+      const res = await fetch('/api/likedVideos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, videoId: id, action }),
+      });
 
-  const filteredVideos =
-    selectedCategory === 'All'
-      ? sampleVideos
-      : sampleVideos.filter((v) => v.category === selectedCategory);
+      if (!res.ok) throw new Error('Failed to update like');
+    } catch {
+      alert('Error updating like, please try again');
+      setLikedVideos((prev) =>
+        isLiked ? [...prev, id] : prev.filter((vid) => vid !== id)
+      );
+    }
+  }
 
   return (
     <main className='p-6 max-w-4xl mx-auto bg-black min-h-screen min-w-screen text-white'>
@@ -83,27 +94,20 @@ export default function FeedPage() {
         ))}
       </div>
 
-      <div className='grid gap-4'>
-        {filteredVideos.map((video) => (
-          <div
-            key={video.id}
-            className='border border-gray-700 p-4 rounded flex justify-between items-center bg-gray-900'
-          >
-            <span>{video.title}</span>
-            <button
-              onClick={() => toggleLike(video.id)}
-              className={`px-3 py-1 rounded transition-colors duration-200
-                ${
-                  likedVideos.includes(video.id)
-                    ? 'bg-red-500 text-white shadow-md'
-                    : 'bg-gray-700 text-gray-300 hover:bg-red-600 hover:text-white'
-                }`}
-            >
-              {likedVideos.includes(video.id) ? 'Liked' : 'Like'}
-            </button>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <p>Loading videos...</p>
+      ) : (
+        <div className='grid gap-4 h-screen overflow-y-scroll snap-y snap-mandatory'>
+          {videos.map((video) => (
+            <VideoCard
+              key={video.id}
+              video={video}
+              likedVideos={likedVideos}
+              toggleLike={toggleLike}
+            />
+          ))}
+        </div>
+      )}
     </main>
   );
 }
