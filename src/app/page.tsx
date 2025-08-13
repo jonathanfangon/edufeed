@@ -15,6 +15,9 @@ export default function Home() {
         <p>
           Go to your <Link href='/profile'>Profile</Link>
         </p>
+        <Link href='/feed' className='text-blue-600 underline'>
+          Go to Video Feed
+        </Link>
       </SignedIn>
     </main>
   );
